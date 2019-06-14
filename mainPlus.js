@@ -31,7 +31,7 @@ let cursorY = 0;
 let loader = new THREE.TextureLoader();
 let ballSize = 0.5;
 let ballSpawnLocation = 4;
-let ballVel = new THREE.Vector3(0, -0.05, 0);
+let ballVel = new THREE.Vector3(-0.05, -0.05, 0);
 let ballMaxVel = -0.05;
 let ballX, ballY;
 let playerX, playerY;
@@ -41,7 +41,8 @@ let playerSizeZ = 0.5;
 let playerSpawnY = 0;
 let fallSpeed = -0.025;
 let zOffset = 1.5;
-let gravity = new THREE.Vector3(0, fallSpeed, 0);
+let room;
+let roomSize = 10;
 
 // Game.
 let isReady = false;
@@ -55,7 +56,7 @@ height = Math.round(window.innerHeight * 0.95);
 
 function setup(){
   // Scene.
-  scene = new Physijs.Scene({ setGravity: gravity });
+  scene = new Physijs.Scene();
   scene.fog = new THREE.Fog(0xffffff, 1, 12);
   clock = new THREE.Clock();
 
@@ -116,6 +117,7 @@ function animate(){
 
   // Simulation.
   if (isReady == true){
+    // Y axis.
     ball.position.y += ball.vel.y;
     ball.vel.y += ball.acc.y;
 
@@ -124,6 +126,21 @@ function animate(){
         ball.vel.y -= ball.acc.y;
         ball.vel.y *= -1;
       }
+    }
+
+    // X axis.
+    ball.position.x += ball.vel.x;
+    ball.vel.x += ball.acc.x;
+
+    // if (ball.position.x + ballSize < room.position.x + (roomSize/2)){
+    //   ball.vel.x -= ball.acc.x;
+    //   ball.vel.x *= -1;
+    // }
+
+    if (ball.position.x < room.position.x - roomSize/2 ||
+        ball.position.x > room.position.x + roomSize/2){
+          ball.vel.x *= -1;
+          ball.acc.x *= -0.01;
     }
   }
 
@@ -191,6 +208,8 @@ function animate(){
         ball.position.y = ballSpawnLocation;
         ball.vel.y = 0;
         break;
+      case "i": // Increase difficulty.
+        increaseDifficulty();
       default:
     }
   })
@@ -200,6 +219,10 @@ function animate(){
 
   // Ball physics.
 
+}
+
+function increaseDifficulty(){
+  player.scale.x = 1;
 }
 
 function getCursorXY(e){
@@ -230,7 +253,6 @@ function setupVideo(){
 
     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
       // Apply the stream to the video element.
-      isReady = true;
       video.srcObject = stream;
       video.play();
     })
@@ -307,9 +329,9 @@ function createGrid(){
 }
 
 function createRoom(){
-  let geo = new THREE.BoxGeometry(10, 20, 10);
+  let geo = new THREE.BoxGeometry(roomSize, roomSize * 2, roomSize);
   let mat = new THREE.MeshLambertMaterial({ color: 0x12294f, side: THREE.BackSide});
-  let room = new THREE.Mesh(geo, mat);
+  room = new THREE.Mesh(geo, mat);
   room.position.set(cameraOffset, 9.95, 3);
   scene.add(room);
 }
