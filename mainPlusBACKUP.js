@@ -11,7 +11,6 @@ let viaColorDetection = false;
 let viaKeyboard = false;
 let viaMouse = true;
 // Video
-let colorWorker;
 let videoW = 1280;
 let videoH = 720;
 let videoTXT;
@@ -77,19 +76,17 @@ function setup(){
   div.appendChild(body);
   document.getElementById('bodyID').appendChild(renderer.domElement);
   setupVideo();
-  // setupColorTracker();
+  setupColorTracker();
   // Window resizing
   window.addEventListener('resize', onWindowResize, false);
 
   // Create objects.
-  createColorWorker();
-  createGrid();
+  // createGrid();
   createRoom();
   createPlayer(-2, playerSpawnY);
   createBall();
   createLighting();
   addParticles();
-
 
   if (viaMouse){
     if (window.Event){
@@ -238,53 +235,6 @@ function animate(){
   particleSystem.rotation.y += 1/120;
 }
 
-// Make worker for color tracker.
-function createColorWorker(){
-  if (typeof(Worker) !== "undefined"){
-    if (typeof(colorWorker) == "undefined"){
-      colorWorker = new Worker("tracking/worker.js");
-      setupColorTracker();
-      setInterval(colorWorker.postMessage(workerJob()), 5);
-    }
-    colorWorker.addEventListener('message', function(e){
-      rectX = e.data[0];
-      rectY = e.data[1];
-    })
-  }
-}
-
-function setupColorTracker(){
-  tracker = new tracking.ColorTracker();
-  tracking.track('#video', tracker);
-
-  // tracker.on('track', function(event) {
-  //   event.data.forEach(function(rect) {
-  //     x = rect.x + rect.width/2;
-  //     y = rect.y + rect.height/2;
-  //     postMessage(x);
-  //     console.log("postMessage(x) succeeded");
-  //   })
-  // });
-
-  // Load interface color tracker.
-  initGUIControllers(tracker);
-}
-
-function workerJob(){
-  let data;
-
-  tracker.on('track', function(event) {
-    if (event.data.length > 0){
-      event.data.forEach(function(rect) {
-        x = rect.x + rect.width/2;
-        y = rect.y + rect.height/2;
-        // postMessage(x);
-      })
-
-    }
-  });
-}
-
 function increaseDifficulty(){
   increased = true;
   let smaller = player.scale.x;
@@ -358,29 +308,29 @@ function setupVideo(){
 
 }
 
-// function setupColorTracker(){
-//   let tracker = new tracking.ColorTracker();
-//   let canvas = document.querySelector('canvas');
-//   let ctx = canvas.getContext('webgl');
-//
-//   tracking.track('#video', tracker);
-//
-//   tracker.on('track', function(event) {
-//     // ctx.clearRect(0, 0, width, height);
-//     event.data.forEach(function(rect) {
-//       // if (rect.color === 'custom') {
-//       //   rect.color = tracker.customColor;
-//       // }
-//
-//       // Assign rect coordinates.
-//       rectX = rect.x + rect.width/2;
-//       rectY = rect.y + rect.height/2;
-//     })
-//   });
-//
-//   // Load interface color tracker.
-//   initGUIControllers(tracker);
-// }
+function setupColorTracker(){
+  let tracker = new tracking.ColorTracker();
+  let canvas = document.querySelector('canvas');
+  let ctx = canvas.getContext('webgl');
+
+  tracking.track('#video', tracker);
+
+  tracker.on('track', function(event) {
+    // ctx.clearRect(0, 0, width, height);
+    event.data.forEach(function(rect) {
+      // if (rect.color === 'custom') {
+      //   rect.color = tracker.customColor;
+      // }
+
+      // Assign rect coordinates.
+      rectX = rect.x + rect.width/2;
+      rectY = rect.y + rect.height/2;
+    })
+  });
+
+  // Load interface color tracker.
+  initGUIControllers(tracker);
+}
 
 function getBallLocation(){
   ballX = ball.position.x + ballSize;
