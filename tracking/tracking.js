@@ -5,11 +5,7 @@
  * @link http://trackingjs.com
  * @license BSD
  */
-  const window = {};
-  let tracking = {};
-
 (function(window, undefined) {
-  window = {};
   window.tracking = window.tracking || {};
 
   /**
@@ -193,7 +189,8 @@
     var height = element.height;
     var context = element.getContext('2d');
     var imageData = context.getImageData(0, 0, width, height);
-    tracker.track(imageData.data, width, height);
+    // tracker.track(imageData.data, width, height);
+    tracker.emit('rawData', imageData);
   };
 
   /**
@@ -3113,19 +3110,3 @@
   }
 
 }());
-
-
-
-let x, y;
-let pixels;
-
-onmessage = function(event){
-  event.data.forEach(function(rect){
-    x = rect.x;
-  })
-  postMessage(x);
-}
-
-function returnData(){
-  postMessage(pixels.data);
-}

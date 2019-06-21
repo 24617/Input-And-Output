@@ -3,21 +3,23 @@ if (WEBGL.isWebGLAvailable() === false){
 }
 
 let scene, camera, renderer, video;
+let uiScene, uiCamera;
 let width, height;
 let player, ball;
 let clock;
 // Game type.
-let viaColorDetection = true;
+let viaColorDetection = false;
 let viaKeyboard = false;
-let viaMouse = false;
+let viaMouse = true;
 // Video
-let videoW = 1280;
-let videoH = 720;
+let videoW = 640;
+let videoH = 360;
 let videoTXT;
 let videoPlayer;
 let videoMAT;
 let videoMesh;
 let cameraOffset = -5;
+let cameraScalingValue = 35;
 // Setup coordinates.
 let rectX = 0;
 let rectY = 0;
@@ -25,12 +27,15 @@ let cursorX = 0;
 let cursorY = 0;
 // Game objects.
 let loader = new THREE.TextureLoader();
+let textLoader = new THREE.FontLoader();
+let fontJSON = '/assets/BitLow_Regular_7pts.json'
 let ballSize = 0.5;
 let ballSpawnLocation = 4;
 let ballVel = new THREE.Vector3(-0.05, -0.05, 0);
 let ballMaxVel = -0.05;
 let ballX, ballY;
 let playerX, playerY;
+let startPlayerSizeX = 2;
 let playerSizeX = 2;
 let playerSizeY = 0.4;
 let playerSizeZ = 0.5;
@@ -45,10 +50,11 @@ let particles;
 let particleMat;
 let particleSystem;
 // Game.
+let textMesh;
 let isReady = false;
-let difficultySpeed = 8;
+let difficultySpeed = 5;
 let gameScore = 0;
-let newScore = 0;
+let highScore = 0;
 let currentScore = 0;
 // Physics.
 Physijs.scripts.worker = '/lib/physijs_worker.js';
@@ -60,10 +66,13 @@ function setup(){
   // Scene.
   scene = new Physijs.Scene();
   scene.fog = new THREE.Fog(0xffffff, 1, 12);
+  uiScene = new THREE.Scene();
   clock = new THREE.Clock();
   // Camera.
   camera = new THREE.PerspectiveCamera(75, width/height, 0.1, 1000);
   camera.position.set(cameraOffset, 2, 5);
+  uiCamera = new THREE.OrthographicCamera(width /-2, width /2, height /2, height /-2, 0.1, 1000);
+  uiCamera.position.set(cameraOffset, 2, 5);
   // Renderer.
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
@@ -81,12 +90,13 @@ function setup(){
   window.addEventListener('resize', onWindowResize, false);
 
   // Create objects.
-  // createGrid();
+  createGrid();
   createRoom();
   createPlayer(-2, playerSpawnY);
   createBall();
   createLighting();
-  addParticles();
+  // addParticles();
+  createScoreboard();
 
   if (viaMouse){
     if (window.Event){
@@ -102,8 +112,11 @@ function setup(){
 function animate(){
   ball._dirtyPosition = true;
   ball._dirtyRotation = true;
-  scene.simulate();
+  // scene.simulate();
+  renderer.autoClear = true;
   renderer.render(scene, camera);
+  renderer.autoClear = false;
+  renderer.render(uiScene, uiCamera);
   requestAnimationFrame(animate);
   // Simulation.
   if (isReady == true){
@@ -119,18 +132,25 @@ function animate(){
         ball.vel.y -= ball.acc.y;
         ball.vel.y *= -1;
         gameScore++;
+        currentScore++;
+        scene.remove(textMesh);
+        textMesh.geometry.dispose();
+        textMesh.material.dispose();
+        textMesh = undefined;
+        createScoreboard();
       }
     }
     // If player fails.
     if (ball.position.y < player.position.y){
-      newScore = gameScore;
+      highScore = gameScore;
       gameScore = 0;
+      currentScore = 0;
+      playerSizeX = startPlayerSizeX;
       // Remove ball.
       scene.remove(ball);
       ball.geometry.dispose();
       ball.material.dispose();
       ball = undefined;
-      // Create new ball.
       createBall();
       ball.vel = new THREE.Vector3(0, 0, 0);
       isReady = false;
@@ -145,14 +165,13 @@ function animate(){
   }
   // Increase difficulty.
   if (gameScore / difficultySpeed > 1){
-    currentScore += gameScore;
-    gameScore -= 10;
+    gameScore -= difficultySpeed;
     increaseDifficulty();
   }
 
   // Convert coords to worldspace.
   if (viaColorDetection){
-    player.position.x = (-rectX/60) - cameraOffset;
+    player.position.x = (-rectX/cameraScalingValue) - cameraOffset;
   }
 
   if (viaKeyboard){
@@ -232,13 +251,52 @@ function animate(){
     }
   });
   // Particle rotation.
-  particleSystem.rotation.y += 1/120;
+  // particleSystem.rotation.y += 1/120;
+}
+
+function createScoreboard(){
+  let font = textLoader.load('assets/BitLow_Regular_7pts.json',
+  function(font){
+    let geo = new THREE.TextGeometry(''+currentScore, {
+      font: font,
+      size: 1,
+      height: 0.1,
+      curveSegments: 12,
+      bevelEnabled: true,
+      bevelThickness: 1,
+      bevelSize: 0.01,
+      bevelOffset: 0,
+      bevelSegments: 0
+    });
+    let mat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    textMesh = new THREE.Mesh(geo, mat);
+    textMesh.position.set(cameraOffset+1, 3.5, zOffset-1);
+    scene.add(textMesh);
+
+    let scoreGeo = new THREE.TextGeometry("SCORE:", {
+      font: font,
+      size: 0.5,
+      height: 0.1,
+      curveSegments: 12,
+      bevelEnabled: true,
+      bevelThickness: 1,
+      bevelSize: 0.01,
+      bevelOffset: 0,
+      bevelSegments: 0
+    });
+    let scoreMesh = new THREE.Mesh(scoreGeo, mat);
+    scoreMesh.position.set(cameraOffset-3, 4, zOffset-2);
+    scene.add(scoreMesh);
+  }
+);
+
 }
 
 function increaseDifficulty(){
   increased = true;
   let smaller = player.scale.x;
   smaller -= 0.1;
+  playerSizeX *= 0.9;
   player.scale.x = smaller;
 }
 
@@ -301,9 +359,7 @@ function setupVideo(){
   videoMAT = new THREE.MeshBasicMaterial({ map: videoTXT });
   videoMesh = new THREE.Mesh(videoPlayer, videoMAT);
   videoMesh.scale.x = -1; // Mirror webcam.
-  videoMesh.position.x = -2;
-  videoMesh.position.y = 3.5;
-  videoMesh.position.z = 2;
+  videoMesh.position.set(cameraOffset, 2, 0);
   scene.add(videoMesh)
 
 }
@@ -368,7 +424,7 @@ function createRoom(){
 }
 
 function createPlayer(x, y){
-  let geo = new THREE.BoxGeometry(playerSizeX, playerSizeY, playerSizeZ);
+  let geo = new THREE.BoxGeometry(startPlayerSizeX, playerSizeY, playerSizeZ);
   let mat = new THREE.MeshLambertMaterial({ color: 0x7D318C });
   player = new Physijs.BoxMesh(geo, mat);
   player.position.set(x, y, zOffset);

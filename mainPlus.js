@@ -3,15 +3,18 @@ if (WEBGL.isWebGLAvailable() === false){
 }
 
 let scene, camera, renderer, video;
+let framesPerSecond = 30;
 let width, height;
 let player, ball;
 let clock;
 // Game type.
-let viaColorDetection = false;
+let viaColorDetection = true;
 let viaKeyboard = false;
-let viaMouse = true;
+let viaMouse = false;
 // Video
 let colorWorker;
+let workerFPS = 60; // Frames per second for color detect.
+let videoData;
 let videoW = 1280;
 let videoH = 720;
 let videoTXT;
@@ -20,6 +23,8 @@ let videoMAT;
 let videoMesh;
 let cameraOffset = -5;
 // Setup coordinates.
+let tracker;
+let trackerData;
 let rectX = 0;
 let rectY = 0;
 let cursorX = 0;
@@ -32,6 +37,7 @@ let ballVel = new THREE.Vector3(-0.05, -0.05, 0);
 let ballMaxVel = -0.05;
 let ballX, ballY;
 let playerX, playerY;
+let playerHitbox;
 let playerSizeX = 2;
 let playerSizeY = 0.4;
 let playerSizeZ = 0.5;
@@ -76,19 +82,21 @@ function setup(){
   document.body.appendChild(div);
   div.appendChild(body);
   document.getElementById('bodyID').appendChild(renderer.domElement);
+  // Setup video properties.
   setupVideo();
-  // setupColorTracker();
-  // Window resizing
+  // Window resizing.
   window.addEventListener('resize', onWindowResize, false);
 
   // Create objects.
+  // getVideoImage('#video');
+  setupColorTracker();
   createColorWorker();
   createGrid();
   createRoom();
   createPlayer(-2, playerSpawnY);
   createBall();
   createLighting();
-  addParticles();
+  // addParticles();
 
 
   if (viaMouse){
@@ -105,6 +113,7 @@ function setup(){
 function animate(){
   ball._dirtyPosition = true;
   ball._dirtyRotation = true;
+  playerHitbox = player.position.y + (playerSizeY/2);
   scene.simulate();
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
@@ -118,7 +127,7 @@ function animate(){
     ball.vel.x += ball.acc.x;
     // Player collision.
     if (ball.position.distanceTo(player.position) + ballSize < playerSizeX){
-      if (ball.position.y - ballSize <= player.position.y + (playerSizeY/2)){
+      if (ball.position.y - ballSize <= playerHitbox){
         ball.vel.y -= ball.acc.y;
         ball.vel.y *= -1;
         gameScore++;
@@ -184,12 +193,11 @@ function animate(){
       }
     })
   };
-
   if (viaMouse){
     player.position.x = cursorX/200 + (cameraOffset * 2);
   }
 
-  // Game mode switcher.
+  // Keyboard input.
   addEventListener('keydown', (e)=>{
     switch (e.key){
       case "k": // Keyboard.
@@ -235,7 +243,20 @@ function animate(){
     }
   });
   // Particle rotation.
-  particleSystem.rotation.y += 1/120;
+  // particleSystem.rotation.y += 1/120;
+  ball.rotation.y += 0.01;
+  ball.rotation.x += 0.008;
+
+  // Send information to worker.
+
+}
+
+// Create work environment for worker.
+function createWorkerEnvironment(){
+  const workCanvas = new OffscreenCanvas(100, 1);
+  const workCtx = workCanvas.getContext('2d');
+  let workVideo = document.getElementById('video');
+
 }
 
 // Make worker for color tracker.
@@ -243,50 +264,32 @@ function createColorWorker(){
   if (typeof(Worker) !== "undefined"){
     if (typeof(colorWorker) == "undefined"){
       colorWorker = new Worker("tracking/worker.js");
-      setupColorTracker();
-      setInterval(colorWorker.postMessage(workerJob()), 5);
-    }
-    colorWorker.addEventListener('message', function(e){
-      rectX = e.data[0];
-      rectY = e.data[1];
-    })
+      colorWorker.onmessage = function(e){
+        // rectX = e.data[0];
+        // rectY = e.data[1];
+        console.log(e);
+      }
+    };
   }
+  setupColorTracker();
+  // Set interval to x frames per second.
+  // setInterval(workerJob, 1/workerFPS*1000);
 }
 
 function setupColorTracker(){
   tracker = new tracking.ColorTracker();
   tracking.track('#video', tracker);
 
-  // tracker.on('track', function(event) {
-  //   event.data.forEach(function(rect) {
-  //     x = rect.x + rect.width/2;
-  //     y = rect.y + rect.height/2;
-  //     postMessage(x);
-  //     console.log("postMessage(x) succeeded");
-  //   })
-  // });
-
-  // Load interface color tracker.
-  initGUIControllers(tracker);
-}
-
-function workerJob(){
-  let data;
-
-  tracker.on('track', function(event) {
-    if (event.data.length > 0){
-      event.data.forEach(function(rect) {
-        x = rect.x + rect.width/2;
-        y = rect.y + rect.height/2;
-        // postMessage(x);
-      })
-
-    }
+  tracker.on('rawData', function(data){
+    colorWorker.postMessage(data);
   });
+
+  initGUIControllers(tracker);
 }
 
 function increaseDifficulty(){
   increased = true;
+  playerHitbox *= 0.9;
   let smaller = player.scale.x;
   smaller -= 0.1;
   player.scale.x = smaller;
@@ -294,7 +297,7 @@ function increaseDifficulty(){
 
 function addParticles(){
   particles = new THREE.Geometry;
-  for (let p = 0; p < 2000; p++){
+  for (let p = 0; p < 500; p++){
     let particle = new THREE.Vector3(Math.random() * 500 - 250, Math.random() *
                   500 - 250, Math.random() * 500 - 250);
     particles.vertices.push(particle);
@@ -325,15 +328,14 @@ function onWindowResize(){
 function setupVideo(){
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
     let constraints = {
-      audio: false,
-      video: {
+      audio: false, video: {
         width: videoW,
         height: videoH,
       }
     };
 
-    navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
-      // Apply the stream to the video element.
+    navigator.mediaDevices.getUserMedia(constraints)
+    .then(function(stream){
       video.srcObject = stream;
       video.play();
     })
@@ -355,32 +357,7 @@ function setupVideo(){
   videoMesh.position.y = 3.5;
   videoMesh.position.z = 2;
   scene.add(videoMesh)
-
 }
-
-// function setupColorTracker(){
-//   let tracker = new tracking.ColorTracker();
-//   let canvas = document.querySelector('canvas');
-//   let ctx = canvas.getContext('webgl');
-//
-//   tracking.track('#video', tracker);
-//
-//   tracker.on('track', function(event) {
-//     // ctx.clearRect(0, 0, width, height);
-//     event.data.forEach(function(rect) {
-//       // if (rect.color === 'custom') {
-//       //   rect.color = tracker.customColor;
-//       // }
-//
-//       // Assign rect coordinates.
-//       rectX = rect.x + rect.width/2;
-//       rectY = rect.y + rect.height/2;
-//     })
-//   });
-//
-//   // Load interface color tracker.
-//   initGUIControllers(tracker);
-// }
 
 function getBallLocation(){
   ballX = ball.position.x + ballSize;
@@ -412,7 +389,9 @@ function createGrid(){
 function createRoom(){
   let geo = new THREE.BoxGeometry(roomSize, roomSize * 2, roomSize);
   let mat = new THREE.MeshLambertMaterial({ color: 0x12294f, side: THREE.BackSide});
+  // let mat = new THREE.MeshLambertMaterial({ color: 0x12294f });
   room = new THREE.Mesh(geo, mat);
+  // room = new Physijs.BoxMesh(geo, mat, 0);
   room.position.set(cameraOffset, 9.95, 3);
   scene.add(room);
 }
@@ -431,6 +410,7 @@ function createBall(){
   let txt = loader.load('assets/carbon.jpg');
   let geo = new THREE.SphereGeometry(ballSize, 32, 32);
   let mat = new THREE.MeshLambertMaterial({ wireframe: false, map: txt });
+   // let mat = new THREE.MeshLambertMaterial({ wireframe: true });
   ball = new Physijs.SphereMesh(geo, mat);
   ball.position.set(cameraOffset, ballSpawnLocation, zOffset);
   ball.castShadow = true;
@@ -439,6 +419,32 @@ function createBall(){
   ball.rad = new THREE.Vector3(1, 1, 0);
   ball.tan = new THREE.Vector3(1, -1, 0);
   scene.add(ball);
+}
+
+function getVideoImage(path, secs, callback){
+  let me = this, video = document.createElement('video');
+
+  video.onloadedmeta = function(){
+    if ('function'=== typeof secs){
+      secs = secs(this.duration);
+    }
+    this.currentTime = Math.min(Math.max(0, (secs < 0 ? this.duration : 0) + secs, this.duration));
+  };
+
+  video.onseeked = function(e){
+    let canvas = document.createElement('canvas');
+    canvas.height = videoH;
+    canvas.width = videoW;
+    let ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    let img = new Image();
+    img.src = canvas.toDataURL();
+    callback.call(me, img, this.currentTime, e);
+  };
+  video.onerror = function(e){
+    callback.call(me, undefined, undefined, e);
+  };
+  video.src = path;
 }
 
 function createLighting(){
